@@ -55,7 +55,9 @@ fixed scene (see `shots.json`).
   JavaScript/HTML5, no network requests, no build step.
 - Fixed 1/60 s simulation steps; procedural canvas textures for building
   facades, roads, the pier and the ocean; a seeded RNG (`?seed=`) so the city
-  and every screenshot are reproducible.
+  and every screenshot are reproducible. The follow camera runs a segment /
+  building-footprint test every frame and pulls in before it can clip
+  through a facade.
 
 ## Layout
 

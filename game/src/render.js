@@ -83,6 +83,42 @@ export function createRender(G) {
     smoothed: new THREE.Vector3(0, 10, 40),
   };
 
+  // 2D slab test: the first fraction t in (0, 1) where the segment from the
+  // player to the wanted camera spot enters a building footprint, or null.
+  // Buildings are all taller than the camera, so an XZ crossing means the
+  // camera would be inside the facade.
+  function segmentHitsBuilding(ax, az, bx, bz) {
+    let best = null;
+    for (const c of G.world.colliders) {
+      const dx = bx - ax;
+      const dz = bz - az;
+      let tmin = 0;
+      let tmax = 1;
+      if (Math.abs(dx) < 1e-9) {
+        if (ax < c.minX || ax > c.maxX) continue;
+      } else {
+        let t1 = (c.minX - ax) / dx;
+        let t2 = (c.maxX - ax) / dx;
+        if (t1 > t2) { const tmp = t1; t1 = t2; t2 = tmp; }
+        tmin = Math.max(tmin, t1);
+        tmax = Math.min(tmax, t2);
+        if (tmin > tmax) continue;
+      }
+      if (Math.abs(dz) < 1e-9) {
+        if (az < c.minZ || az > c.maxZ) continue;
+      } else {
+        let t1 = (c.minZ - az) / dz;
+        let t2 = (c.maxZ - az) / dz;
+        if (t1 > t2) { const tmp = t1; t1 = t2; t2 = tmp; }
+        tmin = Math.max(tmin, t1);
+        tmax = Math.min(tmax, t2);
+        if (tmin > tmax) continue;
+      }
+      if (tmin > 0.02 && (best === null || tmin < best)) best = tmin;
+    }
+    return best;
+  }
+
   function updateCamera(dt, lookDelta) {
     const player = G.player;
     rig.yaw += lookDelta.yaw;
@@ -94,9 +130,18 @@ export function createRender(G) {
     const heading = player.car ? player.car.angle : player.angle;
     // The camera trails behind the heading; the mouse orbits around it.
     const camYaw = heading + Math.PI + rig.yaw;
-    const tx = anchor.x + Math.sin(camYaw) * Math.cos(rig.pitch) * dist;
-    const tz = anchor.z + Math.cos(camYaw) * Math.cos(rig.pitch) * dist;
-    const ty = anchor.y + height + Math.sin(rig.pitch) * dist * 0.6;
+    let tx = anchor.x + Math.sin(camYaw) * Math.cos(rig.pitch) * dist;
+    let tz = anchor.z + Math.cos(camYaw) * Math.cos(rig.pitch) * dist;
+    let ty = anchor.y + height + Math.sin(rig.pitch) * dist * 0.6;
+    // Never let the camera sink into a facade: pull it in just short of the
+    // first building the line of sight would cross.
+    const hit = segmentHitsBuilding(anchor.x, anchor.z, tx, tz);
+    if (hit !== null) {
+      const pull = Math.max(0.15, hit - 0.06);
+      tx = anchor.x + (tx - anchor.x) * pull;
+      tz = anchor.z + (tz - anchor.z) * pull;
+      ty = anchor.y + (ty - anchor.y) * pull;
+    }
     rig.smoothed.lerp(new THREE.Vector3(tx, ty, tz), 1 - Math.exp(-8 * dt));
     camera.position.copy(rig.smoothed);
     camera.lookAt(anchor.x, anchor.y + 1.6, anchor.z);
