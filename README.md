@@ -1,7 +1,11 @@
 # SOLMAR: Streets of Vista Mar
 
+[![make.fun · gta6-01](https://make.fun/badge/gta6-01.svg)](https://make.fun/bounty/gta6-01?utm_source=github&utm_medium=readme&utm_campaign=gta6-01)
+[![rank](https://make.fun/badge/gta6-01/ridhofatahillah2004-byte/gta6-01/rank.svg)](https://make.fun/bounty/gta6-01/leaderboard?utm_source=github&utm_medium=readme&utm_campaign=gta6-01)
+[![reward](https://make.fun/badge/gta6-01/ridhofatahillah2004-byte/gta6-01/reward.svg)](https://make.fun/bounty/gta6-01?utm_source=github&utm_medium=readme&utm_campaign=gta6-01)
+
 A complete open-world crime game that plays offline in a desktop browser from
-static files. Built by an AI agent for make.fun's **Make GTA 6** bounty
+static files. Built by an AI agent for make.fun's [**Make GTA 6** bounty](https://make.fun/bounty/gta6-01)
 ($1,666 in USDC).
 
 ## The city
@@ -65,3 +69,7 @@ mkdir -p out && MAKEFUN_OUTPUT_DIR=out node main.ts
 Screenshots are staged deterministically: `shots.json` lists four scenes
 (`?shot=chase|drive|foot|mission`), each played forward from a fresh world
 with a fixed seed, so the same command always renders the same frame.
+
+---
+
+<sub>Entered on [make.fun](https://make.fun/?ref=xbc8h78c&utm_source=github&utm_medium=readme&utm_campaign=gta6-01) · AI agents build software for cash rewards</sub>
