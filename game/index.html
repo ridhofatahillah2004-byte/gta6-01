@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SOLMAR — Streets of Vista Mar</title>
+<link rel="stylesheet" href="./styles.css">
+<script type="importmap">
+{ "imports": { "three": "./vendor/three.module.min.js" } }
+</script>
+</head>
+<body>
+<canvas id="game" aria-label="SOLMAR: Streets of Vista Mar — an open-world crime game. Drive, steal cars, dodge the police and run jobs for Mara Voss."></canvas>
+
+<div id="hud" class="hidden">
+  <div id="hud-top-left">
+    <div id="stars" aria-label="Wanted level">☆☆☆☆☆</div>
+    <div id="health-bar"><div id="health-fill"></div></div>
+    <div id="cash">$250</div>
+    <div id="ammo"></div>
+  </div>
+  <div id="hud-top-right">
+    <canvas id="minimap" width="200" height="200" aria-label="Minimap of Vista Mar"></canvas>
+  </div>
+  <div id="objective"></div>
+  <div id="speed"></div>
+  <div id="progress-wrap"><div id="progress-label"></div><div id="progress-bar"><div id="progress-fill"></div></div></div>
+  <div id="crosshair">+</div>
+  <div id="toast"></div>
+  <div id="center-msg"></div>
+  <div id="damage"></div>
+  <div id="hint">WASD move · Shift sprint · Space jump/handbrake · E steal car · Click shoot · R reload · P pause · M mute</div>
+</div>
+
+<div id="title-screen" class="screen">
+  <div class="panel">
+    <div class="kicker">AN OPEN-WORLD CRIME GAME</div>
+    <h1>SOLMAR</h1>
+    <div class="subtitle">Streets of Vista Mar</div>
+    <p class="story">Rook is back in Vista Mar — sun, surf and bad decisions. Fixer Mara Voss
+    has four jobs, the cops have long memories, and every car on Ocean Avenue
+    is yours if you are fast enough. Steal, drive, run the jobs, lose the heat.</p>
+    <div class="controls">
+      <span><b>WASD</b> move / drive</span><span><b>Shift</b> sprint</span><span><b>Space</b> jump / handbrake</span>
+      <span><b>E</b> steal &amp; leave car</span><span><b>Click</b> shoot</span><span><b>R</b> reload</span>
+      <span><b>P</b> pause</span><span><b>M</b> mute</span>
+    </div>
+    <div class="buttons">
+      <button id="btn-start" class="primary">▶ Start the story</button>
+      <button id="btn-continue">Continue</button>
+    </div>
+    <div id="best-line"></div>
+  </div>
+</div>
+
+<div id="pause-screen" class="screen hidden">
+  <div class="panel">
+    <h2>Paused</h2>
+    <p class="story">Vista Mar waits. Your progress is saved.</p>
+    <div class="buttons">
+      <button id="btn-resume" class="primary">Resume</button>
+      <button id="btn-quit-title">Quit to title</button>
+    </div>
+  </div>
+</div>
+
+<div id="gameover-screen" class="screen hidden">
+  <div class="panel">
+    <h2 class="wasted">WASTED</h2>
+    <p class="story">The Vista Mar PD finally caught up with Rook.</p>
+    <p id="over-stats"></p>
+    <div class="buttons">
+      <button id="btn-restart" class="primary">Try again</button>
+      <button id="btn-title-2">Title screen</button>
+    </div>
+  </div>
+</div>
+
+<div id="complete-screen" class="screen hidden">
+  <div class="panel">
+    <h2 class="gold">STORY COMPLETE</h2>
+    <p class="story">The bank job is done, the heat is off, and Mara is already planning the
+    next one. Vista Mar is yours, Rook.</p>
+    <p id="complete-stats"></p>
+    <div class="buttons">
+      <button id="btn-free-roam" class="primary">Keep playing — free roam</button>
+      <button id="btn-again">Play the story again</button>
+    </div>
+  </div>
+</div>
+
+<p id="status" role="status" aria-live="polite"></p>
+<script type="module" src="./src/main.js"></script>
+</body>
+</html>

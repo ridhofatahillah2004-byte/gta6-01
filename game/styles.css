@@ -1,0 +1,71 @@
+/* SOLMAR — HUD and menu styling. System fonts only; no external assets. */
+html, body { margin: 0; height: 100%; overflow: hidden; background: #0d1420;
+  font-family: Arial, Helvetica, sans-serif; color: #f2f2f2; }
+#game { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+#status { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.hidden { display: none !important; }
+
+/* ---- HUD ---- */
+#hud { position: fixed; inset: 0; pointer-events: none; z-index: 5; }
+#hud-top-left { position: absolute; top: 14px; left: 16px; }
+#stars { font-size: 26px; letter-spacing: 4px; color: #cfd6de; text-shadow: 0 2px 6px #000; }
+#stars.hot { color: #ff5040; }
+#health-bar { width: 190px; height: 12px; margin-top: 6px; background: rgba(0,0,0,.55);
+  border: 1px solid rgba(255,255,255,.35); border-radius: 6px; overflow: hidden; }
+#health-fill { height: 100%; width: 100%; background: linear-gradient(90deg, #2ecc71, #7ee2a0); transition: width .2s; }
+#health-fill.low { background: linear-gradient(90deg, #e74c3c, #ff7a5c); }
+#cash { margin-top: 6px; font-size: 22px; font-weight: bold; color: #7ee2a0; text-shadow: 0 2px 6px #000; }
+#ammo { margin-top: 2px; font-size: 14px; color: #ffd24a; text-shadow: 0 1px 4px #000; }
+#hud-top-right { position: absolute; top: 14px; right: 16px; }
+#minimap { border: 2px solid rgba(255,255,255,.5); border-radius: 50%; box-shadow: 0 4px 18px rgba(0,0,0,.6); background: #1d2733; }
+#objective { position: absolute; left: 50%; bottom: 96px; transform: translateX(-50%);
+  background: rgba(10,14,22,.72); border-left: 4px solid #ffc93c; padding: 9px 16px; border-radius: 6px;
+  font-size: 16px; max-width: 640px; text-align: center; }
+#speed { position: absolute; right: 22px; bottom: 64px; font-size: 26px; font-weight: bold; text-shadow: 0 2px 6px #000; }
+#progress-wrap { position: absolute; left: 50%; bottom: 150px; transform: translateX(-50%);
+  width: 320px; display: none; text-align: center; }
+#progress-wrap.show { display: block; }
+#progress-label { font-size: 14px; margin-bottom: 5px; text-shadow: 0 1px 4px #000; }
+#progress-bar { height: 12px; background: rgba(0,0,0,.6); border: 1px solid rgba(255,255,255,.4); border-radius: 6px; overflow: hidden; }
+#progress-fill { height: 100%; width: 0; background: #ffc93c; }
+#crosshair { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  font-size: 26px; color: rgba(255,255,255,.85); text-shadow: 0 0 6px #000; display: none; }
+#toast { position: absolute; left: 50%; top: 76px; transform: translateX(-50%);
+  background: rgba(10,14,22,.8); padding: 8px 18px; border-radius: 20px; font-size: 15px;
+  opacity: 0; transition: opacity .3s; white-space: nowrap; }
+#toast.show { opacity: 1; }
+#center-msg { position: absolute; left: 50%; top: 34%; transform: translate(-50%, -50%);
+  text-align: center; opacity: 0; transition: opacity .4s; pointer-events: none; }
+#center-msg.show { opacity: 1; }
+.center-title { font-size: 44px; font-weight: bold; letter-spacing: 6px; color: #ffd24a; text-shadow: 0 4px 18px #000; }
+.center-sub { font-size: 18px; margin-top: 6px; text-shadow: 0 2px 8px #000; }
+#damage { position: absolute; inset: 0; box-shadow: inset 0 0 90px 30px rgba(255,0,0,.55); opacity: 0; transition: opacity .15s; }
+#damage.show { opacity: 1; }
+#hint { position: absolute; left: 16px; bottom: 12px; font-size: 12px; color: rgba(255,255,255,.75); text-shadow: 0 1px 4px #000; }
+
+/* ---- Screens ---- */
+.screen { position: fixed; inset: 0; z-index: 10; display: flex; align-items: center; justify-content: center;
+  background: linear-gradient(180deg, rgba(8,12,24,.25) 0%, rgba(8,12,24,.72) 100%); }
+.panel { max-width: 620px; margin: 0 20px; padding: 34px 40px; text-align: center;
+  background: rgba(10,14,24,.78); border: 1px solid rgba(255,210,74,.35); border-radius: 16px;
+  box-shadow: 0 18px 60px rgba(0,0,0,.6); }
+.kicker { font-size: 12px; letter-spacing: 5px; color: #ffd24a; }
+h1 { margin: 6px 0 0; font-size: 76px; letter-spacing: 10px; line-height: 1;
+  background: linear-gradient(180deg, #ffe9a8, #ff9a3c); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.subtitle { font-size: 20px; letter-spacing: 4px; color: #9fd8ff; margin-top: 4px; }
+h2 { font-size: 44px; margin: 0 0 8px; letter-spacing: 4px; }
+h2.wasted { color: #ff5040; }
+h2.gold { color: #ffd24a; }
+.story { font-size: 16px; line-height: 1.55; color: #dfe6ee; }
+.controls { display: flex; flex-wrap: wrap; gap: 8px 18px; justify-content: center;
+  margin: 18px 0 22px; font-size: 13px; color: #c8d2de; }
+.controls b { color: #ffd24a; }
+.buttons { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+button { pointer-events: auto; cursor: pointer; font-size: 16px; font-weight: bold;
+  padding: 12px 22px; border-radius: 8px; border: 1px solid rgba(255,255,255,.35);
+  background: rgba(255,255,255,.12); color: #fff; }
+button:hover { background: rgba(255,255,255,.22); }
+button.primary { background: #ff9a3c; border-color: #ff9a3c; color: #1a1206; }
+button.primary:hover { background: #ffb35c; }
+#best-line { margin-top: 16px; font-size: 13px; color: #9fb2c8; }
+#over-stats, #complete-stats { font-size: 15px; color: #ffd24a; }
