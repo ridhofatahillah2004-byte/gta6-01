@@ -1,102 +1,62 @@
-// Keyboard + mouse input. Camera orbits by dragging (no pointer lock needed,
-// so it works in a plain browser tab and in headless screenshots); clicking
-// the canvas also tries pointer lock for a locked mouse-look feel.
-import { KEYS } from './config.js';
-
-const ACTION_CONFIRM = 1;
-const ACTION_PAUSE = 2;
-const ACTION_MUTE = 4;
-
-export { ACTION_CONFIRM, ACTION_PAUSE, ACTION_MUTE };
-
-export function createInput(canvas) {
-  const keys = new Set();
-  let actions = 0;
-  let mouseDown = false;
-  let shootHeld = false;
-  let yawDelta = 0;
-  let pitchDelta = 0;
-  let lastX = 0;
-  let lastY = 0;
-
-  function isDown(list) {
-    return list.some((code) => keys.has(code));
+// Keyboard + mouse, with pointer lock for looking around.
+// `pressed(code)` is true only on the frame the key went down.
+export class Input {
+  constructor(canvas) {
+    this.canvas = canvas;
+    this.down = new Set();
+    this.pressedSet = new Set();
+    this.dx = 0;
+    this.dy = 0;
+    this.locked = false;
+    this.onFirstGesture = null;
+    window.addEventListener('keydown', (e) => {
+      if (e.repeat) return;
+      this.down.add(e.code);
+      this.pressedSet.add(e.code);
+      if (this.onFirstGesture) { const f = this.onFirstGesture; this.onFirstGesture = null; f(); }
+      if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space', 'Tab'].includes(e.code)) e.preventDefault();
+    });
+    window.addEventListener('keyup', (e) => { this.down.delete(e.code); });
+    window.addEventListener('blur', () => { this.down.clear(); });
+    document.addEventListener('pointerlockchange', () => {
+      this.locked = document.pointerLockElement === canvas;
+    });
+    document.addEventListener('mousemove', (e) => {
+      if (!this.locked) return;
+      this.dx += e.movementX;
+      this.dy += e.movementY;
+    });
+    document.addEventListener('mousedown', (e) => {
+      if (e.button !== 0) return;
+      if (this.onFirstGesture) { const f = this.onFirstGesture; this.onFirstGesture = null; f(); }
+      if (this.locked) this.pressedSet.add('Mouse0');
+    });
   }
 
-  window.addEventListener('keydown', (event) => {
-    if (event.repeat) return;
-    keys.add(event.code);
-    if (event.code === 'Space' || event.code === 'Enter') actions |= ACTION_CONFIRM;
-    if (event.code === 'KeyP' || event.code === 'Escape') actions |= ACTION_PAUSE;
-    if (event.code === 'KeyM') actions |= ACTION_MUTE;
-    if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.code)) event.preventDefault();
-  });
-  window.addEventListener('keyup', (event) => keys.delete(event.code));
-  window.addEventListener('blur', () => keys.clear());
-
-  canvas.addEventListener('mousedown', (event) => {
-    mouseDown = true;
-    shootHeld = true;
-    lastX = event.clientX;
-    lastY = event.clientY;
-    if (document.pointerLockElement !== canvas) {
-      try {
-        canvas.requestPointerLock();
-      } catch {
-        // Pointer lock is a nicety, not a requirement.
-      }
+  lock() {
+    if (!this.locked && this.canvas.requestPointerLock) {
+      try { this.canvas.requestPointerLock(); } catch { /* headless or denied */ }
     }
-  });
-  window.addEventListener('mouseup', () => {
-    mouseDown = false;
-    shootHeld = false;
-  });
-  window.addEventListener('mousemove', (event) => {
-    if (document.pointerLockElement === canvas) {
-      yawDelta -= event.movementX * 0.0032;
-      pitchDelta -= event.movementY * 0.0028;
-    } else if (mouseDown) {
-      yawDelta -= (event.clientX - lastX) * 0.006;
-      pitchDelta -= (event.clientY - lastY) * 0.005;
-      lastX = event.clientX;
-      lastY = event.clientY;
-    }
-  });
+  }
 
-  return {
-    /** -1..1 forward/back and left/right for this frame. */
-    move() {
-      return {
-        forward: (isDown(KEYS.up) ? 1 : 0) - (isDown(KEYS.down) ? 1 : 0),
-        strafe: (isDown(KEYS.right) ? 1 : 0) - (isDown(KEYS.left) ? 1 : 0),
-      };
-    },
-    sprint() {
-      return isDown(KEYS.sprint);
-    },
-    jump() {
-      return isDown(KEYS.jump);
-    },
-    enterCar() {
-      return isDown(KEYS.enterCar);
-    },
-    reload() {
-      return isDown(KEYS.reload);
-    },
-    shootHeld() {
-      return shootHeld;
-    },
-    /** Mouse-look deltas since the last read, in radians. */
-    lookDelta() {
-      const d = { yaw: yawDelta, pitch: pitchDelta };
-      yawDelta = 0;
-      pitchDelta = 0;
-      return d;
-    },
-    takeActions() {
-      const taken = actions;
-      actions = 0;
-      return taken;
-    },
-  };
+  unlock() { if (document.pointerLockElement) document.exitPointerLock(); }
+
+  isDown(code) { return this.down.has(code); }
+
+  pressed(code) { return this.pressedSet.has(code); }
+
+  /** Mouse movement since last frame, in pixels. */
+  takeMouse() { const m = { x: this.dx, y: this.dy }; this.dx = 0; this.dy = 0; return m; }
+
+  /** Call at the end of every frame. */
+  endFrame() { this.pressedSet.clear(); }
+
+  /** WASD / arrows as a -1..1 pair, camera-relative. */
+  moveAxes() {
+    const x = (this.isDown('KeyD') || this.isDown('ArrowRight') ? 1 : 0)
+      - (this.isDown('KeyA') || this.isDown('ArrowLeft') ? 1 : 0);
+    const y = (this.isDown('KeyW') || this.isDown('ArrowUp') ? 1 : 0)
+      - (this.isDown('KeyS') || this.isDown('ArrowDown') ? 1 : 0);
+    return { x, y };
+  }
 }

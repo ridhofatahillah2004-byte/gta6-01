@@ -1,256 +1,159 @@
-// The story: four jobs for fixer Mara Voss, from a stolen car to the bank
-// vault, plus cash stashes hidden around the city. Each mission is steps with
-// a glowing marker, an objective line and a payout; finishing all four
-// completes the story.
+// Mara Voss's jobs and the twelve cash stashes.
+// A mission is a list of stages; each stage points at a place and a verb.
 import * as THREE from 'three';
-import { WANTED } from './config.js';
+import { MISSIONS, LANDMARKS, STASH_SPOTS, TUNING } from './config.js';
 
-const MISSION_LIST = [
-  {
-    id: 'hot-wheels',
-    title: 'Hot Wheels',
-    briefing: 'Mara needs wheels. Steal any car and bring it to the garage.',
-    reward: 500,
-    steps: [
-      { type: 'steal', text: 'Steal a car (walk up to one and press E)' },
-      { type: 'deliver-car', target: 'garage', text: 'Drive the car to the garage' },
-    ],
-  },
-  {
-    id: 'the-drop',
-    title: 'The Drop',
-    briefing: 'A package is waiting at the docks. Pick it up and take it to the motel. The docks are watched — expect heat.',
-    reward: 800,
-    steps: [
-      { type: 'pickup', target: 'docks', text: 'Pick up the package at the docks', onDone: 'heat' },
-      { type: 'deliver', target: 'motel', text: 'Deliver the package to the motel' },
-    ],
-  },
-  {
-    id: 'heat-wave',
-    title: 'Heat Wave',
-    briefing: 'Mara wants the cops busy elsewhere. Draw three stars of heat, then shake them off completely.',
-    reward: 1200,
-    steps: [
-      { type: 'stars-at-least', stars: 3, text: 'Raise your wanted level to 3 stars' },
-      { type: 'stars-zero', text: 'Lose the cops — get back to 0 stars' },
-    ],
-  },
-  {
-    id: 'the-big-score',
-    title: 'The Big Score',
-    briefing: 'The Vista Mar Bank. Crack the vault, then run for the safehouse with the whole city on your tail.',
-    reward: 3000,
-    steps: [
-      { type: 'goto', target: 'bank', text: 'Get to the Vista Mar Bank' },
-      { type: 'hold', target: 'bank', seconds: 10, text: 'Hold E at the vault to crack it' },
-      { type: 'escape', target: 'safehouse', text: 'Escape to the safehouse' },
-    ],
-  },
-];
-
-export function createMissions(G) {
-  const { scene } = G;
-  let index = 0;
-  let stepIndex = 0;
-  let holdTimer = 0;
-  let marker = null;
-  let markerTarget = null;
-  const pickups = [];
-
-  function makeMarker() {
-    const group = new THREE.Group();
-    const ring = new THREE.Mesh(
-      new THREE.RingGeometry(2.2, 3.0, 32),
-      new THREE.MeshBasicMaterial({ color: 0xffc93c, side: THREE.DoubleSide, transparent: true, opacity: 0.9 }),
+export class MissionSystem {
+  constructor(scene, city) {
+    this.scene = scene;
+    this.city = city;
+    this.mi = 0; // mission index
+    this.si = 0; // stage index
+    this.holdT = 0;
+    this.done = false;
+    this.stashes = [];
+    this.stashTaken = new Set();
+    // Beacon: a pillar of light plus a floating diamond over the target.
+    const pillarMat = new THREE.MeshBasicMaterial({
+      color: 0xffd23c, transparent: true, opacity: 0.16,
+      blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide,
+    });
+    this.beacon = new THREE.Mesh(new THREE.CylinderGeometry(1.4, 1.4, 34, 12, 1, true), pillarMat);
+    this.beacon.position.y = 17;
+    this.diamond = new THREE.Mesh(
+      new THREE.OctahedronGeometry(1.1),
+      new THREE.MeshBasicMaterial({ color: 0xffd23c }),
     );
-    ring.rotation.x = -Math.PI / 2;
-    ring.position.y = 0.15;
-    group.add(ring);
-    const beam = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.8, 0.8, 30, 12, 1, true),
-      new THREE.MeshBasicMaterial({ color: 0xffc93c, transparent: true, opacity: 0.22, side: THREE.DoubleSide, depthWrite: false }),
-    );
-    beam.position.y = 15;
-    group.add(beam);
-    const diamond = new THREE.Mesh(
-      new THREE.OctahedronGeometry(0.7),
-      new THREE.MeshBasicMaterial({ color: 0xffd24a }),
-    );
-    diamond.position.y = 4;
-    group.add(diamond);
-    group.visible = false;
-    scene.add(group);
-    return { group, ring, diamond };
+    this.diamond.position.y = 26;
+    scene.add(this.beacon, this.diamond);
+    // Cash stashes: small green crates with a glow.
+    const crateMat = new THREE.MeshLambertMaterial({ color: 0x2e8a4d, emissive: 0x0a3a1a });
+    const lidMat = new THREE.MeshLambertMaterial({ color: 0xd8b25a });
+    STASH_SPOTS.forEach(([x, z], i) => {
+      const g = new THREE.Group();
+      const box = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.8, 1.1), crateMat);
+      box.position.y = 0.4; box.castShadow = true;
+      const lid = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.16, 1.2), lidMat);
+      lid.position.y = 0.86;
+      g.add(box, lid);
+      g.position.set(x, 0, z);
+      scene.add(g);
+      this.stashes.push({ mesh: g, x, z, taken: false, i });
+    });
   }
 
-  marker = makeMarker();
+  current() { return this.done ? null : MISSIONS[this.mi]; }
 
-  function current() {
-    return MISSION_LIST[index] ?? null;
+  stage() {
+    const m = this.current();
+    return m ? m.stages[this.si] : null;
   }
 
-  function currentStep() {
-    const m = current();
-    return m ? m.steps[stepIndex] : null;
+  objectiveText() {
+    const m = this.current();
+    if (!m) return 'Free roam — Vista Mar is yours. Find stashes, steal cars, stay out of trouble.';
+    const s = m.stages[this.si];
+    return `${m.title}: ${s.text}`;
   }
 
-  function targetPos(name) {
-    const lm = G.world.landmarks[name];
-    return lm ? { x: lm.x, z: lm.z + 14 } : { x: 0, z: 0 };
-  }
-
-  function placeMarker() {
-    const step = currentStep();
-    if (!step || !step.target) {
-      marker.group.visible = false;
-      markerTarget = null;
-      return;
+  /** World position of the current target, or null when the stage has none. */
+  targetPos(G) {
+    const s = this.stage();
+    if (!s) return null;
+    if (s.target) {
+      const L = LANDMARKS[s.target];
+      return { x: L.x, z: L.z };
     }
-    markerTarget = targetPos(step.target);
-    marker.group.position.set(markerTarget.x, 0, markerTarget.z);
-    marker.group.visible = true;
+    if (s.verb === 'steal') {
+      const car = G.vehicles.nearestEnterable(G.player.pos.x, G.player.pos.z, 400);
+      return car ? { x: car.mesh.position.x, z: car.mesh.position.z } : null;
+    }
+    return null;
   }
 
-  function setObjective() {
-    const m = current();
-    const step = currentStep();
-    if (!m) {
-      G.hud.setObjective('Story complete — free roam. Collect stashes, cause chaos.');
-      marker.group.visible = false;
-      return;
-    }
-    G.hud.setObjective(`${m.title}: ${step.text}`);
-    placeMarker();
-  }
-
-  function advanceStep() {
-    const m = current();
-    const step = currentStep();
-    if (step && step.onDone === 'heat') {
-      G.police.addHeat(20, 'the docks are watched');
-    }
-    stepIndex += 1;
-    holdTimer = 0;
-    G.audio.pickup();
-    if (stepIndex >= m.steps.length) {
-      G.player.cash += m.reward;
-      G.hud.toast(`${m.title} complete — +$${m.reward}`);
-      G.audio.missionComplete();
-      G.missionsDone.push(m.id);
-      index += 1;
-      stepIndex = 0;
-      if (index >= MISSION_LIST.length) {
-        G.main.showComplete();
-      }
-    }
-    setObjective();
-  }
-
-  function spawnPickups() {
-    const geo = new THREE.BoxGeometry(0.9, 0.6, 0.5);
-    const mat = new THREE.MeshBasicMaterial({ color: 0x2ecc71 });
-    for (let i = 0; i < 12; i += 1) {
-      const road = G.world.roadLines[G.rng.int(0, G.world.roadLines.length - 1)];
-      const along = G.rng.range(-190, 190);
-      const x = G.rng.chance(0.5) ? along : road + 8;
-      const z = G.rng.chance(0.5) ? road + 8 : along;
-      const mesh = new THREE.Mesh(geo, mat);
-      mesh.position.set(x, 0.5, z);
-      scene.add(mesh);
-      pickups.push({ mesh, x, z, amount: G.rng.pick([50, 100, 100, 200]), taken: false });
+  reset(save) {
+    this.mi = save?.mission ?? 0;
+    this.si = 0;
+    this.holdT = 0;
+    this.done = this.mi >= MISSIONS.length;
+    this.stashTaken = new Set(save?.stashes ?? []);
+    for (const s of this.stashes) {
+      s.taken = this.stashTaken.has(s.i);
+      s.mesh.visible = !s.taken;
     }
   }
 
-  function update(dt) {
-    if (marker.group.visible) {
-      marker.ring.rotation.z += dt * 1.5;
-      marker.diamond.rotation.y += dt * 2;
-      marker.diamond.position.y = 4 + Math.sin(G.time * 2.5) * 0.4;
+  update(dt, G) {
+    // Beacon follows the target and spins.
+    const target = this.targetPos(G);
+    if (target && !this.done) {
+      this.beacon.visible = true; this.diamond.visible = true;
+      this.beacon.position.x = target.x; this.beacon.position.z = target.z;
+      this.diamond.position.x = target.x; this.diamond.position.z = target.z;
+      this.diamond.position.y = 26 + Math.sin(performance.now() * 0.002) * 1.5;
+      this.diamond.rotation.y += dt * 2;
+    } else {
+      this.beacon.visible = false; this.diamond.visible = false;
     }
-    for (const p of pickups) {
-      if (p.taken) continue;
-      p.mesh.rotation.y += dt * 1.5;
-      const d = Math.hypot(G.player.pos.x - p.x, G.player.pos.z - p.z);
-      if (d < 2.2) {
-        p.taken = true;
-        p.mesh.visible = false;
-        G.player.cash += p.amount;
+    // Stashes.
+    for (const s of this.stashes) {
+      if (s.taken) continue;
+      const d = Math.hypot(G.player.pos.x - s.x, G.player.pos.z - s.z);
+      if (d < 2.6) {
+        s.taken = true; s.mesh.visible = false;
+        this.stashTaken.add(s.i);
+        G.addCash(TUNING.stashValue);
         G.audio.pickup();
-        G.hud.toast(`Cash stash +$${p.amount}`);
-        G.effects.burst(new THREE.Vector3(p.x, 1, p.z), 0x2ecc71, 10);
+        G.hud.setPrompt(`Stash found: +$${TUNING.stashValue}`);
       }
     }
-    const m = current();
-    if (!m) return;
-    const step = currentStep();
-    if (!step) return;
-    const player = G.player;
-    const near = (target, radius) => {
-      const t = targetPos(target);
-      return Math.hypot(player.pos.x - t.x, player.pos.z - t.z) < radius;
-    };
-    if (step.type === 'steal' && player.car) advanceStep();
-    else if (step.type === 'deliver-car' && player.car && near(step.target, 8)) advanceStep();
-    else if (step.type === 'goto' && near(step.target, 6)) advanceStep();
-    else if (step.type === 'pickup' && near(step.target, 5)) advanceStep();
-    else if (step.type === 'deliver' && near(step.target, 6)) advanceStep();
-    else if (step.type === 'stars-at-least' && G.wanted.stars >= step.stars) advanceStep();
-    else if (step.type === 'stars-zero' && G.wanted.stars === 0) advanceStep();
-    else if (step.type === 'hold') {
-      if (near(step.target, 6)) {
-        holdTimer += dt;
-        G.hud.setProgress(holdTimer / step.seconds, 'Cracking the vault…');
-        if (holdTimer >= step.seconds) {
-          G.hud.setProgress(0, '');
-          G.police.addHeat(60, 'bank alarm!');
-          advanceStep();
-        }
+    // Mission stages.
+    const m = this.current();
+    if (!m || G.state !== 'play') return;
+    const s = m.stages[this.si];
+    if (s.verb === 'steal') {
+      if (G.player.inCar) this._advance(G);
+      return;
+    }
+    const L = LANDMARKS[s.target];
+    const d = Math.hypot(G.player.pos.x - L.x, G.player.pos.z - L.z);
+    if (s.verb === 'goto') {
+      if (d < 13) this._advance(G, s);
+    } else if (s.verb === 'hold') {
+      if (d < 13) {
+        this.holdT += dt;
+        G.hud.setPrompt(`Hold still… ${Math.ceil(s.seconds - this.holdT)}s`);
+        if (this.holdT >= s.seconds) this._advance(G, s);
       } else {
-        holdTimer = Math.max(0, holdTimer - dt * 2);
-        G.hud.setProgress(holdTimer / step.seconds, 'Cracking the vault…');
+        this.holdT = 0;
       }
-    } else if (step.type === 'escape' && near(step.target, 7)) advanceStep();
-    void WANTED;
-  }
-
-  function jumpTo(missionIndex) {
-    index = Math.min(missionIndex, MISSION_LIST.length - 1);
-    stepIndex = 0;
-    holdTimer = 0;
-    setObjective();
-  }
-
-  function reset() {
-    index = 0;
-    stepIndex = 0;
-    holdTimer = 0;
-    for (const p of pickups) {
-      p.taken = false;
-      p.mesh.visible = true;
     }
-    setObjective();
   }
 
-  function start() {
-    spawnPickups();
-    setObjective();
+  _advance(G, finishedStage) {
+    const m = MISSIONS[this.mi];
+    if (finishedStage && m.id === 'dockside' && this.si === 0) {
+      G.addHeat(TUNING.heatPickup);
+      G.hud.setPrompt('Package taken — the harbour police are coming!');
+    }
+    if (finishedStage && m.id === 'bigscore' && this.si === 1) {
+      G.setHeat(TUNING.heatVault);
+    }
+    this.si += 1;
+    this.holdT = 0;
+    G.audio.pickup();
+    if (this.si >= m.stages.length) {
+      G.addCash(m.reward);
+      G.audio.missionDone();
+      this.mi += 1;
+      this.si = 0;
+      if (this.mi >= MISSIONS.length) {
+        this.done = true;
+        G.storyComplete();
+      } else {
+        const next = MISSIONS[this.mi];
+        G.hud.briefing(next.title, `${next.brief}  Reward: $${next.reward}.`);
+      }
+    }
   }
-
-  return {
-    list: MISSION_LIST,
-    current,
-    currentStep,
-    markerPos() {
-      return markerTarget;
-    },
-    get index() {
-      return index;
-    },
-    update,
-    reset,
-    start,
-    setObjective,
-    jumpTo,
-  };
 }
