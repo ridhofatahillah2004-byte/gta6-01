@@ -3,110 +3,20 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>SOLMAR: Streets of Vista Mar</title>
-<link rel="stylesheet" href="./styles.css">
-<script>
-  // Any load or runtime error is written here so a headless check can see it.
-  window.addEventListener('error', (e) => {
-    const el = document.getElementById('errlog');
-    if (el) el.textContent += (e.message || 'error') + '\n';
-    document.title = 'ERR';
-  });
-  window.addEventListener('unhandledrejection', (e) => {
-    const el = document.getElementById('errlog');
-    if (el) el.textContent += 'rejection: ' + (e.reason && e.reason.message ? e.reason.message : e.reason) + '\n';
-    document.title = 'ERR';
-  });
-</script>
-<script type="importmap">
-{ "imports": { "three": "./vendor/three.module.min.js" } }
-</script>
+<title>SOLMAR — Streets of Vista Mar</title>
+<link rel="icon" href="data:,">
+<style>
+  html, body { margin: 0; padding: 0; height: 100%; overflow: hidden; background: #0b1622; }
+  #app { position: relative; width: 100vw; height: 100vh; }
+  #game { display: block; position: absolute; inset: 0; cursor: crosshair; }
+  #hud { position: absolute; inset: 0; pointer-events: none; }
+</style>
 </head>
 <body>
-<div id="game"></div>
-
-<div id="hud" style="display:none">
-  <div id="top-left">
-    <div id="cash">$0</div>
-    <div id="objective"></div>
-    <div id="prompt"></div>
-  </div>
-  <div id="top-right">
-    <div id="stars">☆☆☆☆☆</div>
-    <canvas id="minimap" width="200" height="200"></canvas>
-  </div>
-  <div id="bottom-left">
-    <div id="health-bar"><div id="health-fill"></div></div>
-  </div>
-  <div id="bottom-right">
-    <div id="ammo"></div>
-    <div id="speed"></div>
-  </div>
-  <div id="briefing" style="display:none">
-    <div id="brief-title"></div>
-    <div id="brief-text"></div>
-  </div>
-  <div id="crosshair" style="display:none">+</div>
-  <div id="vignette"></div>
+<div id="app">
+  <canvas id="game"></canvas>
+  <div id="hud"></div>
 </div>
-
-<div id="screen-title" class="screen" style="display:none">
-  <div class="panel">
-    <h1>SOLMAR</h1>
-    <h2>Streets of Vista Mar</h2>
-    <p class="story">You are new in Vista Mar, a sun-soaked city that pays in cash and
-    punishes in sirens. Mara Voss has four jobs for you — steal, run, deliver,
-    and finally crack the BANK vault itself. The whole city is open: drive it,
-    walk it, rob it.</p>
-    <div class="controls">
-      <div><b>WASD</b> move / drive</div>
-      <div><b>Mouse</b> look (click to lock)</div>
-      <div><b>Shift</b> run &nbsp; <b>Space</b> handbrake</div>
-      <div><b>E</b> steal / exit car</div>
-      <div><b>Click</b> shoot &nbsp; <b>R</b> reload</div>
-      <div><b>M</b> current job &nbsp; <b>Esc</b> pause &nbsp; <b>0</b> mute</div>
-    </div>
-    <div class="buttons">
-      <button id="btn-start">New Game</button>
-      <button id="btn-continue" style="display:none">Continue</button>
-      <button id="btn-mute">Sound: ON</button>
-    </div>
-    <p class="hint">Progress saves automatically in this browser.</p>
-  </div>
-</div>
-
-<div id="screen-pause" class="screen" style="display:none">
-  <div class="panel">
-    <h1>PAUSED</h1>
-    <p class="story">Vista Mar waits. The heat does not.</p>
-    <div class="buttons">
-      <button id="btn-resume">Resume</button>
-      <button id="btn-restart">Restart Story</button>
-    </div>
-  </div>
-</div>
-
-<div id="screen-wasted" class="screen" style="display:none">
-  <div class="panel">
-    <h1 class="red">WASTED</h1>
-    <p class="story" id="wasted-text"></p>
-    <div class="buttons">
-      <button id="btn-retry">Wake up at the Safehouse</button>
-    </div>
-  </div>
-</div>
-
-<div id="screen-complete" class="screen" style="display:none">
-  <div class="panel">
-    <h1 class="gold">STORY COMPLETE</h1>
-    <p class="story" id="complete-stats"></p>
-    <div class="buttons">
-      <button id="btn-freeroam">Keep Playing — Free Roam</button>
-    </div>
-  </div>
-</div>
-
-<div id="errlog"></div>
 <script type="module" src="./src/main.js"></script>
 </body>
 </html>

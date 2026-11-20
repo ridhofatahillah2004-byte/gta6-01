@@ -1,53 +1,56 @@
-// Save / continue through localStorage: cash, story progress, best cash and
-// lifetime stats. Storage failures (private windows) are swallowed.
-import { SAVE_KEY, BEST_KEY } from './config.js';
+// Save progress to localStorage: money, finished missions, collected
+// stashes, the player's spot and health. Saved on big events and every
+// ten seconds of play.
+import { SAVE_KEY } from './config.js';
 
-export function createSave() {
-  function read(key) {
-    try {
-      const raw = window.localStorage.getItem(key);
-      return raw ? JSON.parse(raw) : null;
-    } catch {
-      return null;
-    }
+export function saveGame(G) {
+  try {
+    const data = {
+      money: Math.floor(G.money),
+      done: G.missions.done,
+      stashTaken: G.missions.stash.map((s) => s.taken),
+      x: G.player.x,
+      z: G.player.z,
+      health: G.player.health,
+      savedAt: Date.now(),
+    };
+    localStorage.setItem(SAVE_KEY, JSON.stringify(data));
+  } catch (e) {
+    // Private mode or a full quota: the game keeps running without saves.
   }
+}
 
-  function write(key, value) {
-    try {
-      window.localStorage.setItem(key, JSON.stringify(value));
-    } catch {
-      // Storage can be off: the game still runs, it just does not persist.
-    }
+export function loadGame() {
+  try {
+    const raw = localStorage.getItem(SAVE_KEY);
+    if (!raw) return null;
+    const data = JSON.parse(raw);
+    if (typeof data.money !== 'number') return null;
+    return data;
+  } catch (e) {
+    return null;
   }
+}
 
-  return {
-    load() {
-      return read(SAVE_KEY);
-    },
-    saveGame(G) {
-      write(SAVE_KEY, {
-        cash: Math.floor(G.player.cash),
-        missionIndex: G.missions.index,
-        missionsDone: G.missionsDone,
-        carsStolen: G.stats.carsStolen,
-        playSeconds: Math.floor(G.stats.playSeconds),
-        savedAt: Date.now(),
-      });
-      const best = read(BEST_KEY) || 0;
-      if (G.player.cash > best) write(BEST_KEY, Math.floor(G.player.cash));
-    },
-    readBest() {
-      return read(BEST_KEY) || 0;
-    },
-    recordMission(id) {
-      // G.missionsDone is filled by the caller before this runs.
-    },
-    clear() {
-      try {
-        window.localStorage.removeItem(SAVE_KEY);
-      } catch {
-        // Nothing to clear.
-      }
-    },
-  };
+export function applySave(G, data) {
+  if (!data) return;
+  G.money = data.money;
+  G.missions.done = data.done || [];
+  if (Array.isArray(data.stashTaken)) {
+    data.stashTaken.forEach((t, i) => {
+      if (t && G.missions.stash[i]) G.missions.stash[i].taken = true;
+    });
+  }
+  if (typeof data.x === 'number' && typeof data.z === 'number') {
+    G.player.x = data.x;
+    G.player.z = data.z;
+    G.player.y = G.city.groundHeight(data.x, data.z);
+  }
+  if (typeof data.health === 'number') G.player.health = data.health;
+}
+
+export function clearSave() {
+  try {
+    localStorage.removeItem(SAVE_KEY);
+  } catch (e) { /* ignore */ }
 }

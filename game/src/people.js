@@ -1,186 +1,181 @@
-// The people of Vista Mar: pedestrians who stroll and flee, and the police
-// who arrive when the wanted heat rises.
-import * as THREE from 'three';
-import { ROADS, TUNING, SEED } from './config.js';
-import { makeRng, clamp } from './rng.js';
+// The people of Solmar: pedestrians going about their day, and the police
+// who arrive when the heat rises. Pedestrians walk the sidewalks and flee
+// a speeding car; cruisers chase the player and bust them on foot.
+import { WANTED, CAR } from './config.js';
+import { clamp, angleLerp } from './rng.js';
+import { makeBox } from './render3d.js';
+import { model, multiply } from './mat4.js';
+import { createVehicle, stepVehicle, drawVehicle } from './traffic.js';
 
-const SHIRTS = [0xd85a5a, 0x5a8fd8, 0x5ad88a, 0xe8b13c, 0x8a5fc2, 0xd8d8d2, 0x2e6db8, 0xc26a8a];
+const SHIRTS = [
+  [0.85, 0.3, 0.25], [0.2, 0.5, 0.85], [0.95, 0.8, 0.2], [0.3, 0.7, 0.35],
+  [0.6, 0.3, 0.7], [0.9, 0.55, 0.2], [0.75, 0.75, 0.75], [0.15, 0.6, 0.6],
+];
 
-function makePedMesh(color) {
-  const g = new THREE.Group();
-  const body = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.32, 0.42, 1.05, 8),
-    new THREE.MeshLambertMaterial({ color }),
-  );
-  body.position.y = 0.85; body.castShadow = true;
-  const head = new THREE.Mesh(
-    new THREE.SphereGeometry(0.26, 10, 8),
-    new THREE.MeshLambertMaterial({ color: 0xd8a878 }),
-  );
-  head.position.y = 1.62; head.castShadow = true;
-  const legs = new THREE.Mesh(
-    new THREE.BoxGeometry(0.5, 0.5, 0.3),
-    new THREE.MeshLambertMaterial({ color: 0x2c3240 }),
-  );
-  legs.position.y = 0.25;
-  g.add(body, head, legs);
-  return g;
+export function makePeds(city, rng, count) {
+  const peds = [];
+  for (let i = 0; i < count; i += 1) {
+    const vertical = rng.chance(0.5);
+    const line = city.streets[rng.int(0, city.streets.length - 1)];
+    const along = rng.range(-180, 150);
+    const off = (rng.chance(0.5) ? 1 : -1) * rng.range(7.5, 9.5);
+    const x = vertical ? line + off : along;
+    const z = vertical ? along : line + off;
+    peds.push({
+      x, z, yaw: rng.range(0, Math.PI * 2),
+      speed: rng.range(1.2, 2.2),
+      color: SHIRTS[rng.int(0, SHIRTS.length - 1)],
+      dead: false, fallT: 0, walkPhase: rng.range(0, 6),
+      tx: x + rng.range(-40, 40), tz: z + rng.range(-40, 40),
+      flee: 0,
+    });
+  }
+  return peds;
 }
 
-export class Crowd {
-  constructor(scene, city, vehicles) {
-    this.scene = scene;
-    this.city = city;
-    this.vehicles = vehicles;
-    this.rng = makeRng(SEED + 21);
-    this.peds = [];
-    this.shotAt = null; // {x, z, t} of the last gunshot, for fleeing
-    this.bustedTimer = 0;
-    this._spawnPeds();
+export function updatePeds(G, dt) {
+  const city = G.city;
+  const p = G.player;
+  for (const ped of G.peds) {
+    if (ped.dead) {
+      ped.fallT = Math.min(1, ped.fallT + dt * 3);
+      continue;
+    }
+    // Flee a fast car that is about to hit them.
+    const car = p.car;
+    if (car && Math.abs(car.speed) > 6) {
+      const dx = ped.x - car.x;
+      const dz = ped.z - car.z;
+      if (dx * dx + dz * dz < 64) ped.flee = 1.2;
+    }
+    ped.flee = Math.max(0, ped.flee - dt);
+    const tx = ped.flee > 0 ? ped.x + (ped.x - (car ? car.x : ped.x)) : ped.tx;
+    const tz = ped.flee > 0 ? ped.z + (ped.z - (car ? car.z : ped.z)) : ped.tz;
+    const dx = tx - ped.x;
+    const dz = tz - ped.z;
+    const d = Math.hypot(dx, dz);
+    if (d < 3) {
+      ped.tx = ped.x + G.rng.range(-60, 60);
+      ped.tz = ped.z + G.rng.range(-60, 60);
+      ped.tx = clamp(ped.tx, -190, 190);
+      ped.tz = clamp(ped.tz, -190, 160);
+      continue;
+    }
+    const targetYaw = Math.atan2(dx, dz);
+    ped.yaw = angleLerp(ped.yaw, targetYaw, Math.min(1, dt * 6));
+    const sp = ped.flee > 0 ? 5 : ped.speed;
+    let nx = ped.x + Math.sin(ped.yaw) * sp * dt;
+    let nz = ped.z + Math.cos(ped.yaw) * sp * dt;
+    if (!city.blocked(nx, nz)) {
+      [nx, nz] = city.collide(nx, nz, 0.5);
+      ped.x = nx;
+      ped.z = nz;
+    }
+    ped.walkPhase += dt * sp * 3.2;
   }
+}
 
-  _spawnPeds() {
-    for (let i = 0; i < TUNING.pedCount; i += 1) {
-      const p = this.city.randomSidewalkPoint();
-      const mesh = makePedMesh(this.rng.pick(SHIRTS));
-      mesh.position.set(p.x, 0, p.z);
-      this.scene.add(mesh);
-      this.peds.push({
-        mesh, pos: mesh.position, heading: this.rng.range(0, Math.PI * 2),
-        speed: this.rng.range(1.2, 2), state: 'walk', fleeT: 0, dead: false, deadT: 0,
-        walkT: this.rng.range(2, 6),
+const pedCache = new Map();
+function pedPart(renderer, key, make) {
+  if (!pedCache.has(key)) pedCache.set(key, renderer.mesh(make()));
+  return pedCache.get(key);
+}
+
+// A pedestrian is a small figure: legs, torso in a random shirt colour,
+// head. Dead ones lie flat on the ground.
+export function drawPeds(renderer, G, time) {
+  for (const ped of G.peds) {
+    const swing = ped.dead ? 0 : Math.sin(ped.walkPhase) * 0.5;
+    const pitch = ped.dead ? Math.PI / 2 * ped.fallT : 0;
+    const y = ped.dead ? 0.25 : 0;
+    const base = model(ped.x, y, ped.z, ped.yaw, pitch);
+    const torso = pedPart(renderer, 'ped-torso|' + ped.color.join(','), () => makeBox(0.6, 0.7, 0.36, ped.color, 0));
+    const head = pedPart(renderer, 'ped-head', () => makeBox(0.36, 0.36, 0.36, [0.85, 0.65, 0.5], 0));
+    const leg = pedPart(renderer, 'ped-leg', () => makeBox(0.22, 0.6, 0.24, [0.18, 0.2, 0.25], 0));
+    const at = (ox, oy, oz, p) => multiply(base, model(ox, oy, oz, 0, p || 0));
+    renderer.draw(torso, at(0, 0.95, 0, 0), {});
+    renderer.draw(head, at(0, 1.5, 0, 0), {});
+    renderer.draw(leg, at(-0.16, 0.32, 0, swing), {});
+    renderer.draw(leg, at(0.16, 0.32, 0, -swing), {});
+  }
+}
+
+// --- police ---
+
+export function wantedStars(wanted) {
+  // Config: stars are ceil(heat / 20), 0..5.
+  if (wanted <= 0) return 0;
+  return Math.min(5, Math.ceil(wanted / 20));
+}
+
+function spawnCop(G, rng) {
+  const p = G.player;
+  const angle = rng.range(0, Math.PI * 2);
+  const dist = rng.range(45, 70);
+  const street = G.city.streets[rng.int(0, G.city.streets.length - 1)];
+  const vertical = rng.chance(0.5);
+  const x = vertical ? street : p.x + Math.sin(angle) * dist;
+  const z = vertical ? p.z + Math.cos(angle) * dist : street;
+  const cop = createVehicle(clamp(x, -190, 190), clamp(z, -190, 160), 0, '#f8f9fa', 'police');
+  cop.speed = 8;
+  return cop;
+}
+
+export function updatePolice(G, dt) {
+  const p = G.player;
+  const stars = wantedStars(G.wanted);
+  // Spawn up to the wanted level's cruiser count; despawn when the heat dies.
+  if (G.wanted === 0) {
+    if (G.police.length > 0 && G.time - p.lastCrimeAt > 12) {
+      G.police = G.police.filter((c) => {
+        const dx = c.x - p.x;
+        const dz = c.z - p.z;
+        return dx * dx + dz * dz < 2500;
       });
     }
+  } else if (G.police.length < stars && G.time - (G.lastCopSpawn || 0) > 2.5) {
+    G.police.push(spawnCop(G, G.rng));
+    G.lastCopSpawn = G.time;
   }
-
-  /** A gunshot just went off here — pedestrians nearby will run. */
-  noteShot(x, z) { this.shotAt = { x, z, t: 0 }; }
-
-  nearestPed(x, z, maxD) {
-    let best = null, bestD = maxD;
-    for (const p of this.peds) {
-      if (p.dead) continue;
-      const d = Math.hypot(p.pos.x - x, p.pos.z - z);
-      if (d < bestD) { bestD = d; best = p; }
-    }
-    return best;
-  }
-
-  killPed(ped) {
-    if (ped.dead) return;
-    ped.dead = true;
-    ped.deadT = 0;
-    ped.mesh.rotation.x = -Math.PI / 2;
-    ped.mesh.position.y = 0.35;
-  }
-
-  update(dt, G) {
-    const player = G.player;
-    if (this.shotAt) {
-      this.shotAt.t += dt;
-      if (this.shotAt.t > 4) this.shotAt = null;
-    }
-    for (const p of this.peds) {
-      if (p.dead) {
-        p.deadT += dt;
-        if (p.deadT > 2.5) {
-          // Get back up elsewhere: the streets always have people.
-          const spot = this.city.randomSidewalkPoint();
-          p.pos.set(spot.x, 0, spot.z);
-          p.mesh.rotation.x = 0;
-          p.dead = false;
-        }
-        continue;
-      }
-      // Flee the player when close, or a recent gunshot.
-      let threat = null;
-      const dp = Math.hypot(p.pos.x - player.pos.x, p.pos.z - player.pos.z);
-      if (dp < 7) threat = player.pos;
-      else if (this.shotAt && Math.hypot(p.pos.x - this.shotAt.x, p.pos.z - this.shotAt.z) < 25) threat = this.shotAt;
-      if (threat) { p.state = 'flee'; p.fleeT = 3; }
-      else if (p.fleeT > 0) { p.fleeT -= dt; if (p.fleeT <= 0) p.state = 'walk'; }
-      if (p.state === 'flee' && threat) {
-        const away = Math.atan2(p.pos.x - threat.x, p.pos.z - threat.z);
-        p.heading = away;
-        p.speed = 7.5;
-      } else {
-        p.walkT -= dt;
-        if (p.walkT <= 0) {
-          p.walkT = this.rng.range(2, 6);
-          p.heading += this.rng.range(-1.2, 1.2);
-        }
-        p.speed = 1.6;
-      }
-      p.pos.x += Math.sin(p.heading) * p.speed * dt;
-      p.pos.z += Math.cos(p.heading) * p.speed * dt;
-      this.city.resolveCircle(p.pos, 0.5);
-      p.mesh.rotation.y = p.heading;
-      // Little walking bob.
-      p.mesh.position.y = Math.abs(Math.sin(performance.now() * 0.008 + p.pos.x)) * 0.05;
-    }
-    this._updatePolice(dt, G);
-  }
-
-  _spawnPointNear(player, dist) {
-    // A road point roughly `dist` away from the player, on the road grid.
-    const road = ROADS[Math.floor(this.rng.next() * ROADS.length)];
-    const along = this.rng.range(-200, 200);
-    const horiz = this.rng.chance(0.5);
-    const cand = horiz ? { x: along, z: road } : { x: road, z: along };
-    const d = Math.hypot(cand.x - player.pos.x, cand.z - player.pos.z);
-    if (d < dist * 0.6 || d > dist * 1.8) {
-      // Nudge it toward the wanted ring.
-      const a = Math.atan2(cand.x - player.pos.x, cand.z - player.pos.z);
-      return { x: player.pos.x + Math.sin(a) * dist, z: player.pos.z + Math.cos(a) * dist };
-    }
-    return cand;
-  }
-
-  _updatePolice(dt, G) {
-    const stars = TUNING.starsFor(G.heat);
-    const want = stars;
-    const have = this.vehicles.police.length;
-    if (have < want && G.state === 'play') {
-      const spot = this._spawnPointNear(G.player, 62);
-      this.vehicles.spawnPolice(spot.x, spot.z);
-    } else if (have > want) {
-      // Heat fell: the furthest unit gives up and drives off.
-      let far = null, farD = 0;
-      for (const c of this.vehicles.police) {
-        const d = Math.hypot(c.mesh.position.x - G.player.pos.x, c.mesh.position.z - G.player.pos.z);
-        if (d > farD) { farD = d; far = c; }
-      }
-      if (far) this.vehicles.removePolice(far);
-    }
-    if (this.vehicles.police.length) {
-      this.vehicles.updatePolice(dt, G.player.pos, this.city);
-      // Shooting: each unit fires on its own timer when in range.
-      for (const car of this.vehicles.police) {
-        car.shootT -= dt;
-        const d = Math.hypot(car.mesh.position.x - G.player.pos.x, car.mesh.position.z - G.player.pos.z);
-        if (car.shootT <= 0 && d < TUNING.policeShootRange && G.state === 'play') {
-          car.shootT = TUNING.policeShotInterval * (0.8 + this.rng.next() * 0.5);
-          const cover = G.player.inCar ? 0.55 : 1;
-          const chance = clamp(0.5 - d / 110, 0.08, 0.45) * cover;
-          const hit = this.rng.next() < chance;
-          G.combat.enemyShotFrom(car.mesh.position, G.player.pos, hit);
-          if (hit) {
-            G.damagePlayer(TUNING.policeShotDamage, 'shot');
-          }
-        }
-        // Ramming the player on foot: stand on them and it is over.
-        if (!G.player.inCar && d < 3.2) {
-          this.bustedTimer += dt;
-          if (this.bustedTimer >= TUNING.bustedSeconds) {
-            this.bustedTimer = 0;
-            G.busted();
-          }
-        }
-      }
-      if (this.vehicles.police.every((c) => Math.hypot(c.mesh.position.x - G.player.pos.x, c.mesh.position.z - G.player.pos.z) >= 3.2)) {
-        this.bustedTimer = 0;
+  for (const cop of G.police) {
+    if (cop.disabled) continue;
+    const dx = p.x - cop.x;
+    const dz = p.z - cop.z;
+    const dist = Math.hypot(dx, dz);
+    const desired = Math.atan2(dx, dz);
+    let diff = desired - cop.yaw;
+    while (diff > Math.PI) diff -= Math.PI * 2;
+    while (diff < -Math.PI) diff += Math.PI * 2;
+    const steer = clamp(diff * 1.8, -1, 1);
+    const throttle = dist > 4 ? 1 : 0.4;
+    stepVehicle(cop, dt, throttle, steer, G.city);
+    // Cruisers get faster with the heat, up to the config's per-star cap.
+    const cap = WANTED.policeSpeed[stars] || 15;
+    if (cop.speed > cap) cop.speed = cap;
+    // Ramming the player on foot hurts; touching them busts the player.
+    if (p.onFoot && dist < 2.6) {
+      if (G.wanted > 0) {
+        G.busted = true;
+      } else if (G.time - (cop.lastHit || 0) > 1) {
+        cop.lastHit = G.time;
+        p.health -= 12;
+        G.hud.shake(0.5);
+        G.audio.busted();
       }
     }
-    G.audio.siren(stars > 0 && G.state === 'play');
+    // Cops also push traffic out of the way a little.
+    for (const v of G.traffic) {
+      const vx = v.x - cop.x;
+      const vz = v.z - cop.z;
+      if (vx * vx + vz * vz < 12) {
+        v.x += vx * 0.3;
+        v.z += vz * 0.3;
+      }
+    }
   }
+  G.police = G.police.filter((c) => !c.disabled || c.damaged < 8);
+}
+
+export function drawPolice(renderer, G, time) {
+  for (const cop of G.police) drawVehicle(renderer, cop, time);
 }

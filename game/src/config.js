@@ -1,130 +1,138 @@
 // SOLMAR: Streets of Vista Mar — shared tuning, layout and story data.
-// Every number the game runs on lives here so the other modules stay small.
-export const SEED = 20261119;
-
-// The city is a grid of roads; blocks sit between them.
+// Every number here is the single source of truth for the other modules:
+// the city grid, the missions, the wanted system and the economy.
 export const WORLD = {
-  half: 220, // city spans x,z in [-220, 220]; ocean past z = 220
-  roadGap: 44, // distance between neighbouring road centrelines
-  roadWidth: 9,
-  block: 35,
+  half: 200, // city spans x,z in [-200, 200]
+  roadEvery: 40, // distance between street centrelines
+  roadHalfWidth: 5, // half the width of a road
+  blockSize: 30, // building block side (roadEvery - 2 * roadHalfWidth)
+  seaZ: 200, // ocean starts here (south edge)
+  sandZ: 168, // beach sand starts here
+  pierX: 100, // pier centreline
+  pierZ0: 168, // pier starts at the sand
+  pierZ1: 262, // pier ends out over the water
+  pierDeckY: 0.25,
 };
 
-// Road centrelines, both directions.
-export const ROADS = [-198, -154, -110, -66, -22, 22, 66, 110, 154, 198];
-
-// Named places the missions and the minimap point at.
-export const LANDMARKS = {
-  BANK: { x: 44, z: -44, label: 'BANK', color: 0xd8b25a },
-  GARAGE: { x: -176, z: 44, label: 'GARAGE', color: 0x5a8fd8 },
-  DOCKS: { x: 154, z: 176, label: 'DOCKS', color: 0x8a6f4d },
-  MOTEL: { x: 176, z: -88, label: 'MOTEL', color: 0xd85a8a },
-  SAFEHOUSE: { x: -88, z: -176, label: 'SAFEHOUSE', color: 0x5ad88a },
+// Sun-soaked late-afternoon palette for the whole game.
+export const PALETTE = {
+  sky: [0.62, 0.78, 0.92],
+  fog: [0.98, 0.82, 0.62],
+  sunDir: [0.45, 0.72, 0.35], // direction TO the sun (fragment shader uses it as the light vector)
+  grass: [0.32, 0.62, 0.30],
+  sand: [0.93, 0.82, 0.58],
+  ocean: [0.10, 0.45, 0.72],
+  asphalt: [0.92, 0.92, 0.94], // road tint: near-white so the asphalt texture shows at full strength (vertex colour multiplies the texture)
+  sidewalk: [0.55, 0.53, 0.48],
+  building: [0.82, 0.76, 0.68],
+  glass: [0.45, 0.65, 0.80],
 };
 
-// The park (north-west) and the beach + ocean (south edge).
-export const PARK = { x0: -220, z0: -220, x1: -110, z1: -110, pond: { x: -165, z: -165, r: 26 } };
-export const BEACH = { z0: 198, z1: 220 };
-export const OCEAN = { z0: 220, z1: 460 };
-export const PIER = { x: 0, z0: 198, z1: 300, width: 10 };
-
-// Player, car and police tuning.
-export const TUNING = {
-  walkSpeed: 6,
-  runSpeed: 10.5,
-  playerRadius: 0.7,
-  playerHealth: 100,
-  carAccel: 16,
-  carBrake: 30,
-  carMaxSpeed: 34,
-  carReverseMax: 10,
-  carSteer: 0.55,
-  trafficSpeed: 11,
-  trafficCount: 9,
-  pedCount: 14,
-  heatDecay: 1.6, // per second while quiet
-  heatStealCar: 25,
-  heatShoot: 8,
-  heatHitPed: 20,
-  heatPickup: 20, // mission 3 pickup calls the police
-  heatVault: 80, // mission 4 sets heat to this
-  starsFor: (heat) => Math.min(5, Math.ceil(heat / 20)),
-  policePerStar: 1,
-  policeSpeed: 26,
-  policeShootRange: 42,
-  policeShotInterval: 1.4,
-  policeShotDamage: 7,
-  pistolMag: 12,
-  pistolReload: 1.2,
-  pistolRange: 90,
-  stashValue: 100,
-  bustedSeconds: 2, // a police car parked on the player on foot
+export const PLAYER = {
+  walkSpeed: 7,
+  runSpeed: 11,
+  radius: 0.6,
+  health: 100,
+  startMoney: 250,
+  startPos: [8, 0, 24],
 };
 
-// Mara Voss's four jobs. Each stage has a target place and a verb.
+export const CAR = {
+  accel: 22,
+  brake: 34,
+  maxSpeed: 34,
+  maxReverse: 10,
+  steer: 1.9,
+  grip: 6.5,
+};
+
+// Wanted heat 0..100. Stars are ceil(heat / 20), 0..5.
+export const WANTED = {
+  stealCar: 15,
+  shoot: 8,
+  hitPed: 25,
+  hitPolice: 12,
+  decayPerSec: 1.6,
+  decayDelaySec: 8,
+  policePerStar: [0, 1, 2, 3, 4, 5],
+  policeSpeed: [0, 15, 18, 22, 26, 30],
+};
+
+// Mara Voss, the fixer who runs Vista Mar from a back office above the
+// Palms Casino. Four jobs, each one bigger than the last.
 export const MISSIONS = [
   {
-    id: 'wheels',
-    title: 'Job 1 — First Wheels',
-    brief: 'Mara Voss: "New in Vista Mar? Prove you can drive. Take any car and bring it to the GARAGE."',
-    reward: 500,
-    stages: [
-      { verb: 'steal', text: 'Steal a car (walk up to one and press E)', target: null },
-      { verb: 'goto', text: 'Drive to the GARAGE', target: 'GARAGE' },
+    id: 0,
+    name: 'First Errand',
+    pay: 500,
+    giver: 'Mara Voss',
+    brief: 'A package is waiting at the docks. Pick it up and bring it to the Palms Casino. No trouble, no noise.',
+    steps: [
+      { kind: 'goto', label: 'Pick up the package at the docks', pos: [-160, 0, 138] },
+      { kind: 'goto', label: 'Deliver the package to the Palms Casino', pos: [40, 0, 104] },
     ],
   },
   {
-    id: 'bankrun',
-    title: 'Job 2 — Bank Run',
-    brief: 'Mara Voss: "The BANK keeps a cash drawer by the door. Walk in, hold still, and walk out rich."',
-    reward: 800,
-    stages: [
-      { verb: 'goto', text: 'Get to the BANK', target: 'BANK' },
-      { verb: 'hold', text: 'Hold still inside the BANK (5s)', target: 'BANK', seconds: 5 },
-      { verb: 'goto', text: 'Lose the heat — reach the MOTEL', target: 'MOTEL' },
+    id: 1,
+    name: 'Getaway Driver',
+    pay: 800,
+    giver: 'Mara Voss',
+    brief: 'A tuned coupe is parked by the stadium. Take it — loudly — and bring it to the garage on the west side. The cops will notice.',
+    steps: [
+      { kind: 'steal', label: 'Steal the marked coupe by the stadium', pos: [120, 0, -108], car: 'coupe' },
+      { kind: 'goto', label: 'Deliver the coupe to the garage', pos: [-118, 0, 66], wanted: 40 },
     ],
   },
   {
-    id: 'dockside',
-    title: 'Job 3 — Dockside Drop',
-    brief: 'Mara Voss: "A package is waiting at the DOCKS. Pick it up and run it to the SAFEHOUSE. The harbour police will not love it."',
-    reward: 1200,
-    stages: [
-      { verb: 'goto', text: 'Pick up the package at the DOCKS', target: 'DOCKS' },
-      { verb: 'goto', text: 'Deliver it to the SAFEHOUSE', target: 'SAFEHOUSE' },
+    id: 2,
+    name: 'The Collection',
+    pay: 1200,
+    giver: 'Mara Voss',
+    brief: 'Three drops are waiting around the city. Collect them all before the trail goes cold — four minutes.',
+    steps: [
+      { kind: 'collect', label: 'Collect the drops (0/3)', pos: [-100, 0, -60], count: 3, timeLimit: 240 },
     ],
   },
   {
-    id: 'bigscore',
-    title: 'Job 4 — The Big Score',
-    brief: 'Mara Voss: "Tonight we take the BANK vault itself. Ten seconds inside, then run like the whole city is watching — because it will be."',
-    reward: 3000,
-    stages: [
-      { verb: 'goto', text: 'Get to the BANK', target: 'BANK' },
-      { verb: 'hold', text: 'Crack the vault — hold still inside (10s)', target: 'BANK', seconds: 10 },
-      { verb: 'goto', text: 'Escape to the SAFEHOUSE', target: 'SAFEHOUSE' },
+    id: 3,
+    name: 'The Big Score',
+    pay: 3000,
+    giver: 'Mara Voss',
+    brief: 'Vista Bank. One vault, one bag, four stars. Grab the cash and get to the hideout before the whole city closes in.',
+    steps: [
+      { kind: 'goto', label: 'Enter Vista Bank', pos: [80, 0, -26] },
+      { kind: 'grab', label: 'Grab the vault cash', pos: [80, 0, -26] },
+      { kind: 'goto', label: 'Escape to the hideout', pos: [-158, 0, -138], wanted: 80 },
     ],
   },
 ];
 
-// Twelve cash stashes, tucked on sidewalks and quiet corners.
-export const STASH_SPOTS = [
-  [-198, -198], [-22, -198], [110, -198], [198, -110], [198, 22], [110, 110],
-  [-66, 154], [-198, 110], [-154, -22], [22, -110], [154, -66], [-110, 198],
+// Twelve cash stashes hidden around Vista Mar. Walk over one to take it.
+export const STASHES = [
+  { name: 'Park bench', pos: [-118, 0, -82] },
+  { name: 'Pier end', pos: [100, 0, 256] },
+  { name: 'Stadium gate', pos: [118, 0, -96] },
+  { name: 'Lighthouse base', pos: [146, 0, 188] },
+  { name: 'Casino alley', pos: [80, 0, 104] },
+  { name: 'Bank alley', pos: [120, 0, -22] },
+  { name: 'Docks crate', pos: [-160, 0, 122] },
+  { name: 'Garage yard', pos: [-104, 0, 78] },
+  { name: 'Beach towel', pos: [42, 0, 182] },
+  { name: 'Tower plaza', pos: [-160, 0, -168] },
+  { name: 'Market alley', pos: [-22, 0, 40] },
+  { name: 'Hospital lot', pos: [120, 0, 58] },
 ];
 
+export const LANDMARKS = [
+  { name: 'Vista Tower', pos: [-178, 0, -178], kind: 'tower' },
+  { name: 'Marina Pier', pos: [100, 0, 215], kind: 'pier' },
+  { name: 'Solmar Stadium', pos: [140, 0, -120], kind: 'stadium' },
+  { name: 'The Palms Casino', pos: [40, 0, 120], kind: 'casino' },
+  { name: 'Old Lighthouse', pos: [150, 0, 192], kind: 'lighthouse' },
+  { name: 'Vista Bank', pos: [80, 0, -40], kind: 'bank' },
+  { name: 'General Hospital', pos: [120, 0, 40], kind: 'hospital' },
+];
+
+export const STASH_VALUE = 150;
 export const SAVE_KEY = 'solmar-save-v1';
-
-export const PALETTE = {
-  sky: 0x8fc3e8,
-  fog: 0xa8c8de,
-  sun: 0xfff2cf,
-  asphalt: 0x33363b,
-  sidewalk: 0x9a9a92,
-  grass: 0x5d9b4a,
-  sand: 0xdcc28e,
-  ocean: 0x2a7ab8,
-  building: [0xb8a88f, 0x9fb0bd, 0xc2b49a, 0x8fa3b5, 0xd0c0a0, 0xa89a86],
-  windowLit: 0xffd98a,
-  windowDark: 0x2c3a4a,
-};
+export const SEED = 20261120;
